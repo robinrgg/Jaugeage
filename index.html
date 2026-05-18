@@ -1444,11 +1444,14 @@ window.addEventListener('beforeunload', (e) => {
   if (saveStatus === 'saving') { e.preventDefault(); e.returnValue = ''; }
 });
 
-// Service Worker temporairement désactivé pour debug
-// (sera réactivé une fois l'app validée en ligne)
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(regs => {
-    regs.forEach(reg => reg.unregister());
+// Service Worker — activation différée pour ne pas bloquer le premier rendu
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('SW enregistré, scope:', reg.scope))
+        .catch(err => console.warn('SW échec:', err));
+    }, 1000);
   });
 }
 
