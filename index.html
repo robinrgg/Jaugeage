@@ -345,7 +345,7 @@ button.btn.full { width: 100%; }
 <body>
 
 <header class="app-header">
-  <h1><span class="accent">▌</span>JAUGEAGE<span class="sub">moulinet</span></h1>
+  <h1><span class="accent">▌</span>JAUGEAGE</h1>
   <span class="status-pill" id="saveStatus">—</span>
 </header>
 
@@ -750,7 +750,7 @@ function renderVerticales() {
     summary.className = 'vert-summary';
     summary.innerHTML = `
       <div class="vert-num mono">${dispIdx + 1}${v.isBord ? '·B' : ''}</div>
-      <div class="vert-cell"><span class="lbl">Abscisse</span><span class="v">${fmt(v.abscisse, 2)} m</span></div>
+      <div class="vert-cell"><span class="lbl">Distance au bord</span><span class="v">${fmt(v.abscisse, 2)} m</span></div>
       <div class="vert-cell"><span class="lbl">Profondeur</span><span class="v">${fmt(v.profondeur, 2)} m</span></div>
       <div class="vert-handle">${state.expandedVertId === v.id ? '▾' : '▸'}</div>
     `;
@@ -799,7 +799,7 @@ function renderVertDetail(v) {
 
   return `
     <div class="field-row cols-2">
-      <div class="field"><label>Abscisse (m)</label>
+      <div class="field"><label>Distance au bord (m)</label>
         <input type="number" step="0.01" inputmode="decimal" class="mono" value="${v.abscisse ?? ''}" oninput="updVert('${v.id}','abscisse',this.value)">
       </div>
       <div class="field"><label>Profondeur (m)</label>
@@ -808,7 +808,7 @@ function renderVertDetail(v) {
     </div>
     <div class="field"><label>Mode points</label>
       <select class="mono" onchange="changeMode('${v.id}', this.value)" ${v.isBord ? 'disabled' : ''}>
-        <option value="auto" ${v.pointsMode==='auto'?'selected':''}>Auto (selon P)</option>
+        <option value="auto" ${v.pointsMode==='auto'?'selected':''}>Auto (selon profondeur)</option>
         <option value="1" ${v.pointsMode==='1'?'selected':''}>1 pt — 0,4 H</option>
         <option value="2" ${v.pointsMode==='2'?'selected':''}>2 pts — 0,2 / 0,8 H</option>
         <option value="3" ${v.pointsMode==='3'?'selected':''}>3 pts — 0,2 / 0,4 / 0,8 H</option>
@@ -849,10 +849,6 @@ function renderResults() {
       warnings.push('ℹ Pas de bord en début de transect.');
     if (!r.verts.some(v => v.isBord && v.abscisse === xMax))
       warnings.push('ℹ Pas de bord en fin de transect.');
-  }
-  if (r.partials && r.Q > 0) {
-    const maxPart = Math.max(...r.partials.map(p => Math.abs(p.Q))) / r.Q;
-    if (maxPart > 0.15) warnings.push(`⚠ Une bande contribue à ${(maxPart*100).toFixed(0)}% du débit — densifier.`);
   }
   document.getElementById('r_warn').innerHTML = warnings.map(w => `<div class="warn-line">${w}</div>`).join('');
 }
@@ -1057,7 +1053,7 @@ function renderViz() {
     <line x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}" stroke="#5e6b78" stroke-width="0.5"/>
     <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#5e6b78" stroke-width="0.5"/>
     ${ticksHtml}${yTicksHtml}
-    <text x="${(padL + W - padR)/2}" y="${H-6}" text-anchor="middle" fill="#8a96a3" font-family="IBM Plex Sans" font-size="11">Abscisse (m)</text>
+    <text x="${(padL + W - padR)/2}" y="${H-6}" text-anchor="middle" fill="#8a96a3" font-family="IBM Plex Sans" font-size="11">Distance au bord (m)</text>
     <text x="13" y="${(H-padB+padT)/2}" text-anchor="middle" fill="#8a96a3" font-family="IBM Plex Sans" font-size="11" transform="rotate(-90 13 ${(H-padB+padT)/2})">Profondeur (m)</text>
     <rect x="${scaleX}" y="${padT}" width="${scaleW}" height="${scaleH}" fill="url(#velGradient)" stroke="#34454f" stroke-width="0.5"/>
     ${scaleTicks}
