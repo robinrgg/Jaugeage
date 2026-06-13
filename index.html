@@ -43,6 +43,17 @@ body {
 }
 .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
 input, select, textarea, button { font-family: inherit; font-size: inherit; color: inherit; }
+
+/* Masquer les flèches up/down sur les inputs numériques (anti miss-click tactile) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 button { cursor: pointer; }
 
 .app-header {
