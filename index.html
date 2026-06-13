@@ -144,19 +144,34 @@ section.card.collapsed .toggle { transform: rotate(-90deg); }
   background: var(--bg); overflow: hidden;
 }
 .vert-card.is-bord { border-color: var(--border-strong); background: var(--bg-elev2); }
+.vert-card.is-bathy { background: var(--bg-elev2); }
 .vert-card.is-active { border-color: var(--accent); }
+.vert-card.quality-green { border-left: 3px solid #4ade80; }
+.vert-card.quality-yellow { border-left: 3px solid #facc15; }
+.vert-card.quality-red { border-left: 3px solid #ef4444; }
 .vert-summary {
   display: grid;
-  grid-template-columns: 30px 1fr 1fr 24px;
+  grid-template-columns: 30px 1fr 1fr auto 24px;
   align-items: center; padding: 9px 8px; gap: 6px;
   cursor: pointer;
 }
+.qual-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-elev);
+  color: var(--txt-mute);
+}
+.vert-card.quality-green .qual-badge { color: #4ade80; }
+.vert-card.quality-yellow .qual-badge { color: #facc15; }
+.vert-card.quality-red .qual-badge { color: #ef4444; }
 .vert-num {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px; font-weight: 600;
   color: var(--txt-mute); text-align: center;
 }
 .vert-card.is-bord .vert-num { color: var(--accent-dim); }
+.vert-card.is-bathy .vert-num { color: #38bdf8; }
 .vert-cell { display: flex; flex-direction: column; gap: 1px; }
 .vert-cell .v {
   font-family: 'IBM Plex Mono', monospace;
@@ -258,6 +273,10 @@ button.btn.full { width: 100%; }
   font-size: 11px; color: var(--txt-dim);
   margin-left: 3px; font-weight: 400;
 }
+.result-cell .val .sub {
+  display: block; font-size: 11px; color: var(--txt-dim);
+  font-weight: 400; margin-top: 2px; letter-spacing: 0;
+}
 .result-cell.hi { grid-column: 1 / -1; background: var(--bg-elev2); }
 .result-cell.hi .val { color: var(--accent); font-size: 26px; }
 @media (min-width: 520px) {
@@ -309,11 +328,18 @@ button.btn.full { width: 100%; }
   z-index: 100; opacity: 0; pointer-events: none;
   transition: opacity 0.2s; font-size: 13px;
   max-width: 90%; text-align: center;
+  display: flex; align-items: center; gap: 12px;
 }
-.toast.show { opacity: 1; }
+.toast.show { opacity: 1; pointer-events: auto; }
 .toast.ok { border-left: 3px solid var(--ok); }
 .toast.err { border-left: 3px solid var(--err); }
 .toast.warn { border-left: 3px solid var(--warn); }
+.toast .toast-action {
+  background: transparent; color: var(--accent); border: none;
+  font-weight: 600; cursor: pointer; padding: 4px 8px;
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.toast .toast-action:hover { color: var(--accent-dim); }
 
 .modal-bg {
   position: fixed; inset: 0;
@@ -383,12 +409,11 @@ button.btn.full { width: 100%; }
     </header>
     <div class="body">
       <div class="hint" style="margin-bottom:10px">
-        Saisir d'une rive vers l'autre. Ajouter un « Bord » à chaque extrémité (P=0, V=0).
+        Saisir d'une rive vers l'autre. Aux extrémités, cocher « Bord » sur la verticale pour appliquer le coefficient de rive.
       </div>
       <div class="verticales-list" id="vertList"></div>
       <div class="section-action-bar">
         <button class="btn primary small" onclick="addVerticale()">＋ Verticale</button>
-        <button class="btn small" onclick="addBord()">＋ Bord</button>
       </div>
     </div>
   </section>
@@ -400,6 +425,10 @@ button.btn.full { width: 100%; }
         <div class="result-cell hi">
           <span class="lbl">Débit total</span>
           <span class="val mono" id="r_Q">—<span class="unit">m³/s</span></span>
+        </div>
+        <div class="result-cell">
+          <span class="lbl">Incertitude (95 %)</span>
+          <span class="val mono" id="r_U">—<span class="unit">%</span></span>
         </div>
         <div class="result-cell">
           <span class="lbl">Section</span>
@@ -471,11 +500,12 @@ button.btn.full { width: 100%; }
     <div class="body">
       <div class="btn-group">
         <button class="btn small" onclick="exportJSON()">⬇ Exporter en JSON</button>
+        <button class="btn small" onclick="exportCSV()">⬇ Exporter en CSV</button>
         <button class="btn small" onclick="document.getElementById('importFile').click()">⬆ Charger un JSON</button>
         <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
       </div>
       <div class="hint" style="margin-top:8px">
-        Exporte uniquement le jaugeage en cours (l'onglet Saisie), au format JSON réimportable ensuite.
+        Exporte le jaugeage en cours. JSON pour réimport ultérieur. CSV pour exploitation Excel/Calc.
       </div>
     </div>
   </section>
@@ -520,8 +550,10 @@ const newVerticale = (abscisse = 0, isBord = false) => ({
   abscisse: abscisse,
   profondeur: isBord ? 0 : '',
   isBord: isBord,
+  isBathy: false,                       // verticale bathymétrique (profondeur seule, vitesse interpolée par Froude)
+  coeffRive: isBord ? 0.67 : null,      // coefficient de rive (berge naturelle 0,67 par défaut)
   pointsMode: 'auto',
-  points: isBord ? [{ z_rel: 0.4, v: 0 }] : []
+  points: []                            // les bords n'ont plus de points : leur vitesse est calculée par α·V_proche
 });
 
 let state = { meta: defaultMeta(), verticales: [], expandedVertId: null };
@@ -627,7 +659,13 @@ function meanVelocity(points) {
     return (sorted[0].v + 2*sorted[1].v + sorted[2].v) / 4;
   }
   if (n === 5 && near(sorted[0].z_rel, 0) && near(sorted[1].z_rel, 0.2) && near(sorted[2].z_rel, 0.4) && near(sorted[3].z_rel, 0.8) && near(sorted[4].z_rel, 1)) {
-    return (sorted[0].v + 3*sorted[1].v + 3*sorted[2].v + 2*sorted[3].v + sorted[4].v) / 10;
+    // ISO 748:2021 §7.1.4.3.5 (éq. 9). En repère depuis la surface : 0,1·(v_s + 3·v_0,2 + 3·v_0,6 + 2·v_0,8 + v_f)
+    // Transposé en repère fond (poids 1, 2, 3, 3, 1 du fond vers la surface) :
+    return (sorted[0].v + 2*sorted[1].v + 3*sorted[2].v + 3*sorted[3].v + sorted[4].v) / 10;
+  }
+  if (n === 6 && near(sorted[0].z_rel, 0) && near(sorted[1].z_rel, 0.2) && near(sorted[2].z_rel, 0.4) && near(sorted[3].z_rel, 0.6) && near(sorted[4].z_rel, 0.8) && near(sorted[5].z_rel, 1)) {
+    // ISO 748:2021 §7.1.4.3.6 (éq. 10), symétrique (1, 2, 2, 2, 2, 1)
+    return (sorted[0].v + 2*sorted[1].v + 2*sorted[2].v + 2*sorted[3].v + 2*sorted[4].v + sorted[5].v) / 10;
   }
   let z = sorted.map(p => p.z_rel);
   let v = sorted.map(p => p.v);
@@ -647,14 +685,55 @@ function computeAll() {
       ...v,
       abscisse: parseFloat(v.abscisse),
       profondeur: parseFloat(v.profondeur) || 0,
-      V_moy: meanVelocity((v.points || []).map(p => ({
+      coeffRive: (v.coeffRive !== null && v.coeffRive !== undefined && v.coeffRive !== '') ? parseFloat(v.coeffRive) : null,
+      V_mes: meanVelocity((v.points || []).map(p => ({
         z_rel: parseFloat(p.z_rel), v: parseFloat(p.v)
       }))),
     }))
     .sort((a, b) => a.abscisse - b.abscisse);
 
-  if (verts.length < 2) return { Q: 0, S: 0, Vmoy: 0, Pmoy: 0, L: 0, verts, partials: [] };
+  if (verts.length < 2) return { Q: 0, S: 0, Vmoy: 0, Pmoy: 0, L: 0, verts, partials: [], uncertainty: null };
 
+  /* Calcul des V_moy effectives selon le type de verticale */
+  const g = 9.81;
+  const isComplete = (v) => !v.isBord && !v.isBathy && v.V_mes > 0;
+
+  /* On résout d'abord les verticales mesurées (pour qu'elles aient V_moy), puis les bathy, puis les bords */
+  verts.forEach(v => { if (!v.isBord && !v.isBathy) v.V_moy = v.V_mes; });
+
+  verts.forEach((v, i) => {
+    if (!v.isBathy) return;
+    /* Verticale bathymétrique : interpolation linéaire du nombre de Froude
+       (Le Coz et al. 2012, fiche OFB 4.4). Conformément au modèle Moulinet INRAE,
+       l'interpolation N'EST PAS EXTRAPOLÉE : sans encadrement par deux verticales
+       complètes (une à gauche ET une à droite), V_moy est forcée à 0
+       (le débit partiel sera nul). */
+    const { left, right } = surroundingCompleteIdx(verts, i);
+    if (left !== -1 && right !== -1) {
+      const vL = verts[left], vR = verts[right];
+      const FrL = vL.profondeur > 0 ? vL.V_mes / Math.sqrt(g * vL.profondeur) : 0;
+      const FrR = vR.profondeur > 0 ? vR.V_mes / Math.sqrt(g * vR.profondeur) : 0;
+      const dx = vR.abscisse - vL.abscisse;
+      const Fr = dx > 0 ? ((vR.abscisse - v.abscisse) * FrL + (v.abscisse - vL.abscisse) * FrR) / dx : 0;
+      v.V_moy = v.profondeur > 0 ? Fr * Math.sqrt(g * v.profondeur) : 0;
+    } else {
+      v.V_moy = 0;
+    }
+  });
+
+  verts.forEach((v, i) => {
+    if (!v.isBord) return;
+    /* Bord : V_bord = α × V_verticale_immédiatement_adjacente_dans_le_transect
+       (modèle Moulinet INRAE — utilise verticals[1] pour le bord gauche et
+       verticals[n-2] pour le bord droit, qu'elle soit complète ou bathymétrique). */
+    const alpha = v.coeffRive !== null ? v.coeffRive : 0.67;
+    let adjacent;
+    if (i === 0 && verts.length > 1) adjacent = verts[1];
+    else if (i === verts.length - 1 && verts.length > 1) adjacent = verts[verts.length - 2];
+    v.V_moy = (adjacent && typeof adjacent.V_moy === 'number') ? alpha * adjacent.V_moy : 0;
+  });
+
+  /* Méthode section médiane ISO 748 §8.1.3 */
   let Q = 0, S = 0;
   const partials = [];
   for (let i = 0; i < verts.length; i++) {
@@ -665,12 +744,77 @@ function computeAll() {
     const Qi = verts[i].V_moy * verts[i].profondeur * L;
     const Si = verts[i].profondeur * L;
     Q += Qi; S += Si;
-    partials.push({ id: verts[i].id, Q: Qi, S: Si });
+    partials.push({ id: verts[i].id, Q: Qi, S: Si, L });
   }
   const Vmoy = S > 0 ? Q / S : 0;
   const Pmoy = verts.reduce((a, v) => a + v.profondeur, 0) / verts.length;
   const L = verts[verts.length-1].abscisse - verts[0].abscisse;
-  return { Q, S, Vmoy, Pmoy, L, verts, partials };
+
+  /* Incertitude ISO 748:2021 §9.2 */
+  const uncertainty = Q > 0 ? computeUncertaintyISO748(verts, partials, Q) : null;
+
+  return { Q, S, Vmoy, Pmoy, L, verts, partials, uncertainty };
+}
+
+/* Verticales complètes encadrantes (gauche/droite) pour interpolation Froude des bathy */
+function surroundingCompleteIdx(verts, i) {
+  let left = -1, right = -1;
+  for (let j = i - 1; j >= 0; j--) {
+    if (!verts[j].isBord && !verts[j].isBathy && verts[j].V_mes > 0) { left = j; break; }
+  }
+  for (let j = i + 1; j < verts.length; j++) {
+    if (!verts[j].isBord && !verts[j].isBathy && verts[j].V_mes > 0) { right = j; break; }
+  }
+  return { left, right };
+}
+
+/* Incertitude composée selon ISO 748:2021 §9.2 — formule (21)
+   u_Q² = u_s² + u_m² + Σ(q_i²·u_q,i²) / Q²
+   où u_q,i² = u_b² + u_d² + u_p² + u_c² + u_e,i²
+   Résultat en % au niveau de confiance 95 % (k=2 implicite par convention ISO).
+   Valeurs par défaut alignées sur Moulinet INRAE (chunk-UDDJD3IE.js, classe uo) :
+   - u_s = 1 %   (incertitude systématique)
+   - u_b = 0,5 % (largeur)
+   - u_d = 0,5 % (profondeur)
+   - u_p = 1 %   (vitesse ponctuelle, hors étalonnage)
+   - u_c = 1 %   (étalonnage moulinet)
+   - u_e dépend du nombre de points par verticale (table E.5 ISO 748:2007)
+   - u_m dépend du nombre de verticales (table D.6 ISO 748:2021) */
+function computeUncertaintyISO748(verts, partials, Q) {
+  const u_s = 1.0, u_b = 0.5, u_d = 0.5, u_p = 1.0, u_c = 1.0;
+
+  const n = verts.length;
+  let u_m;
+  if (n >= 35) u_m = 2.0;
+  else if (n >= 25) u_m = 2.5;
+  else if (n >= 20) u_m = 3.0;
+  else if (n >= 15) u_m = 4.0;
+  else if (n >= 10) u_m = 5.0;
+  else if (n >= 5)  u_m = 7.5;
+  else              u_m = 10.0;
+
+  function u_e_for_vertical(v) {
+    if (v.isBord)  return 10.0;
+    if (v.isBathy) return 7.5;
+    const np = (v.points || []).filter(p => !isNaN(parseFloat(p.v))).length;
+    if (np >= 6) return 2.0;
+    if (np === 5) return 2.5;
+    if (np >= 3)  return 3.0;
+    if (np === 2) return 3.5;
+    return 7.5;
+  }
+
+  let sumSq = 0;
+  verts.forEach((v, i) => {
+    const u_e = u_e_for_vertical(v);
+    const u_qi2 = u_b*u_b + u_d*u_d + u_p*u_p + u_c*u_c + u_e*u_e;
+    const qi = partials[i].Q;
+    sumSq += qi * qi * u_qi2;
+  });
+  const u_q_rel2 = Q > 0 ? sumSq / (Q * Q) : 0;
+  const u_Q = Math.sqrt(u_s*u_s + u_m*u_m + u_q_rel2);
+
+  return { u_Q, u_s, u_m, u_b, u_d, u_p, u_c, n };
 }
 
 /* Normalisation : détecte automatiquement les bords aux extrémités du transect */
@@ -686,8 +830,8 @@ function normalizeVerticales(verts) {
     const p = parseFloat(v.profondeur);
     const isExtreme = (x === xMin || x === xMax);
     const noDepth = isNaN(p) || p === 0 || v.profondeur === '' || v.profondeur === null;
-    if (isExtreme && noDepth) {
-      return { ...v, isBord: true, profondeur: 0, points: [{ z_rel: 0.4, v: 0 }] };
+    if (isExtreme && noDepth && !v.isBord) {
+      return { ...v, isBord: true, profondeur: 0, points: [], coeffRive: 0.67 };
     }
     return v;
   });
@@ -707,6 +851,7 @@ function pointsForMode(mode, D) {
     case '2': return [{ z_rel: 0.2, v: '' }, { z_rel: 0.8, v: '' }];
     case '3': return [{ z_rel: 0.2, v: '' }, { z_rel: 0.4, v: '' }, { z_rel: 0.8, v: '' }];
     case '5': return [{ z_rel: 0, v: '' },{ z_rel: 0.2, v: '' },{ z_rel: 0.4, v: '' },{ z_rel: 0.8, v: '' },{ z_rel: 1, v: '' }];
+    case '6': return [{ z_rel: 0, v: '' },{ z_rel: 0.2, v: '' },{ z_rel: 0.4, v: '' },{ z_rel: 0.6, v: '' },{ z_rel: 0.8, v: '' },{ z_rel: 1, v: '' }];
     default: return [];
   }
 }
@@ -734,6 +879,13 @@ function renderVerticales() {
     list.innerHTML = '<div class="empty">Aucune verticale.<br>Toucher « ＋ Verticale » pour démarrer.</div>';
     return;
   }
+  /* Récupère les débits partiels pour la coloration qualité */
+  const r = computeAll();
+  const partialByVertId = {};
+  if (r && r.partials && r.Q > 0) {
+    r.partials.forEach(p => { partialByVertId[p.id] = Math.abs(p.Q) / r.Q; });
+  }
+
   const sorted = [...state.verticales].map((v, i) => ({ ...v, _idx: i }))
     .sort((a, b) => {
       const aa = parseFloat(a.abscisse); const bb = parseFloat(b.abscisse);
@@ -743,15 +895,31 @@ function renderVerticales() {
     });
   list.innerHTML = '';
   sorted.forEach((v, dispIdx) => {
+    const part = partialByVertId[v.id] || 0;
+    let qualCls = '';
+    if (r.Q > 0) {
+      if (part > 0.15) qualCls = ' quality-red';
+      else if (part > 0.10) qualCls = ' quality-yellow';
+      else qualCls = ' quality-green';
+    }
     const card = document.createElement('div');
-    card.className = 'vert-card' + (v.isBord ? ' is-bord' : '') + (state.expandedVertId === v.id ? ' is-active' : '');
+    let typeCls = '';
+    if (v.isBord) typeCls = ' is-bord';
+    else if (v.isBathy) typeCls = ' is-bathy';
+    card.className = 'vert-card' + typeCls + qualCls + (state.expandedVertId === v.id ? ' is-active' : '');
+
+    let tag = '';
+    if (v.isBord) tag = '·B';
+    else if (v.isBathy) tag = '·Z';
+    const partBadge = (r.Q > 0 && !isNaN(part)) ? `<span class="qual-badge">${(part*100).toFixed(1)}%</span>` : '';
 
     const summary = document.createElement('div');
     summary.className = 'vert-summary';
     summary.innerHTML = `
-      <div class="vert-num mono">${dispIdx + 1}${v.isBord ? '·B' : ''}</div>
+      <div class="vert-num mono">${dispIdx + 1}${tag}</div>
       <div class="vert-cell"><span class="lbl">Distance au bord</span><span class="v">${fmt(v.abscisse, 2)} m</span></div>
       <div class="vert-cell"><span class="lbl">Profondeur</span><span class="v">${fmt(v.profondeur, 2)} m</span></div>
+      ${partBadge}
       <div class="vert-handle">${state.expandedVertId === v.id ? '▾' : '▸'}</div>
     `;
     summary.onclick = (e) => {
@@ -773,6 +941,8 @@ function renderVerticales() {
 function renderVertDetail(v) {
   const D = parseFloat(v.profondeur) || 0;
   const isCustom = v.pointsMode === 'custom';
+  const showPoints = !v.isBord && !v.isBathy;
+
   const pointsHtml = (v.points || []).map((p, idx) => {
     const zRel = parseFloat(p.z_rel);
     const hMeters = !isNaN(zRel) && D > 0 ? (zRel * D).toFixed(2).replace('.', ',') : '—';
@@ -797,36 +967,62 @@ function renderVertDetail(v) {
     `;
   }).join('');
 
+  /* Bloc spécifique : coefficient de rive (bord uniquement) */
+  const bordBlock = v.isBord ? `
+    <div class="field">
+      <label>Coefficient de rive α</label>
+      <select class="mono" onchange="setCoeffRive('${v.id}', this.value)">
+        <option value="0.67" ${near(v.coeffRive, 0.67) ? 'selected' : ''}>0,67 — berge inclinée naturelle</option>
+        <option value="0.86" ${near(v.coeffRive, 0.86) ? 'selected' : ''}>0,86 — intermédiaire</option>
+        <option value="0.91" ${near(v.coeffRive, 0.91) ? 'selected' : ''}>0,91 — paroi verticale lisse</option>
+      </select>
+    </div>
+  ` : '';
+
+  /* Bloc spécifique : verticale bathymétrique */
+  const bathyBlock = v.isBathy ? `
+    <div class="hint">Verticale bathymétrique : profondeur seule. V<sub>moy</sub> interpolée par F<sub>r</sub> local entre les deux verticales complètes encadrantes (Le Coz et al. 2012).</div>
+  ` : '';
+
   return `
     <div class="field-row cols-2">
       <div class="field"><label>Distance au bord (m)</label>
         <input type="number" step="0.01" inputmode="decimal" class="mono" value="${v.abscisse ?? ''}" oninput="updVert('${v.id}','abscisse',this.value)">
       </div>
       <div class="field"><label>Profondeur (m)</label>
-        <input type="number" step="0.01" inputmode="decimal" class="mono" value="${v.profondeur ?? ''}" oninput="updVert('${v.id}','profondeur',this.value)" ${v.isBord ? 'disabled' : ''}>
+        <input type="number" step="0.01" inputmode="decimal" class="mono" value="${v.profondeur ?? ''}" oninput="updVert('${v.id}','profondeur',this.value)">
       </div>
     </div>
+    ${showPoints ? `
     <div class="field"><label>Mode points</label>
-      <select class="mono" onchange="changeMode('${v.id}', this.value)" ${v.isBord ? 'disabled' : ''}>
+      <select class="mono" onchange="changeMode('${v.id}', this.value)">
         <option value="auto" ${v.pointsMode==='auto'?'selected':''}>Auto (selon profondeur)</option>
         <option value="1" ${v.pointsMode==='1'?'selected':''}>1 pt — 0,4 H</option>
         <option value="2" ${v.pointsMode==='2'?'selected':''}>2 pts — 0,2 / 0,8 H</option>
         <option value="3" ${v.pointsMode==='3'?'selected':''}>3 pts — 0,2 / 0,4 / 0,8 H</option>
         <option value="5" ${v.pointsMode==='5'?'selected':''}>5 pts — 0 / 0,2 / 0,4 / 0,8 / 1 H</option>
+        <option value="6" ${v.pointsMode==='6'?'selected':''}>6 pts — 0 / 0,2 / 0,4 / 0,6 / 0,8 / 1 H</option>
         <option value="custom" ${v.pointsMode==='custom'?'selected':''}>Personnalisé</option>
       </select>
     </div>
+    ` : ''}
+    ${bordBlock}
+    ${bathyBlock}
     <div class="switch-wrap">
       <input type="checkbox" id="bord_${v.id}" ${v.isBord?'checked':''} onchange="toggleBord('${v.id}', this.checked)">
-      <label for="bord_${v.id}">Verticale de bord (P=0, V=0)</label>
+      <label for="bord_${v.id}">Verticale de bord (coefficient de rive)</label>
     </div>
-    ${v.isBord ? '<div class="hint">Bord : valeurs nulles, délimite le transect.</div>' : `
+    <div class="switch-wrap">
+      <input type="checkbox" id="bathy_${v.id}" ${v.isBathy?'checked':''} onchange="toggleBathy('${v.id}', this.checked)" ${v.isBord?'disabled':''}>
+      <label for="bathy_${v.id}">Verticale bathymétrique (profondeur seule)</label>
+    </div>
+    ${showPoints ? `
       <div class="points-header">
         <span>Position</span><span>H (m)</span><span>v (m/s)</span><span></span>
       </div>
       <div class="points-list">${pointsHtml}</div>
       ${isCustom ? `<button class="btn small ghost" onclick="addPoint('${v.id}')">＋ Point</button>` : ''}
-    `}
+    ` : ''}
     <div style="margin-top:12px;display:flex;justify-content:flex-end">
       <button class="btn small danger" onclick="rmVert('${v.id}')">✕ Supprimer</button>
     </div>
@@ -839,9 +1035,21 @@ function renderResults() {
   document.getElementById('r_Vmoy').innerHTML = `${fmt(r.Vmoy, 3)}<span class="unit">m/s</span>`;
   document.getElementById('r_Pmoy').innerHTML = `${fmt(r.Pmoy, 2)}<span class="unit">m</span>`;
   document.getElementById('r_L').innerHTML = `${fmt(r.L, 2)}<span class="unit">m</span>`;
+  const uEl = document.getElementById('r_U');
+  if (uEl) {
+    if (r.uncertainty) {
+      const uPct = r.uncertainty.u_Q;
+      const uAbs = r.Q * uPct / 100;
+      uEl.innerHTML = `±${fmt(uPct, 1)}<span class="unit">%</span><span class="sub mono">±${fmt(uAbs, 3)} m³/s</span>`;
+    } else {
+      uEl.innerHTML = `—<span class="unit">%</span>`;
+    }
+  }
 
   const warnings = [];
-  if (r.verts.length < 2) warnings.push('⚠ Au moins 2 verticales nécessaires.');
+  if (r.verts.length < 2) {
+    warnings.push('⚠ Au moins 2 verticales nécessaires pour calculer un débit.');
+  }
   if (r.verts.length > 0) {
     const xMin = Math.min(...r.verts.map(x => x.abscisse));
     const xMax = Math.max(...r.verts.map(x => x.abscisse));
@@ -849,6 +1057,27 @@ function renderResults() {
       warnings.push('ℹ Pas de bord en début de transect.');
     if (!r.verts.some(v => v.isBord && v.abscisse === xMax))
       warnings.push('ℹ Pas de bord en fin de transect.');
+  }
+  /* Qualité de la répartition : verticales captant > 15 % du débit */
+  if (r.Q > 0) {
+    const redVerts = r.partials.filter((p, i) => !r.verts[i].isBord && Math.abs(p.Q) / r.Q > 0.15).length;
+    if (redVerts > 0) {
+      warnings.push(`⚠ ${redVerts} verticale${redVerts > 1 ? 's captent' : ' capte'} plus de 15 % du débit (cf. barre rouge) : densifier les mesures à cet endroit.`);
+    }
+  }
+  /* Verticales bathymétriques sans encadrement complet (V_moy forcée à 0) */
+  const bathyNonEncadrees = r.verts.filter((v, i) => {
+    if (!v.isBathy) return false;
+    const { left, right } = surroundingCompleteIdx(r.verts, i);
+    return left === -1 || right === -1;
+  }).length;
+  if (bathyNonEncadrees > 0) {
+    warnings.push(`⚠ ${bathyNonEncadrees} verticale${bathyNonEncadrees > 1 ? 's' : ''} bathymétrique${bathyNonEncadrees > 1 ? 's' : ''} sans encadrement complet (V_moy = 0, contribution nulle au débit).`);
+  }
+  /* Nombre de verticales complètes : recommandation ISO 748 (15 à 25) */
+  const nComplet = r.verts.filter(v => !v.isBord && !v.isBathy).length;
+  if (nComplet > 0 && nComplet < 5) {
+    warnings.push(`ℹ Seulement ${nComplet} verticale${nComplet > 1 ? 's complètes' : ' complète'} mesurée${nComplet > 1 ? 's' : ''} : incertitude transversale élevée (u_m ≥ 7,5 %).`);
   }
   document.getElementById('r_warn').innerHTML = warnings.map(w => `<div class="warn-line">${w}</div>`).join('');
 }
@@ -1110,19 +1339,27 @@ function addVerticale() {
   renderVerticales(); renderResults(); renderViz();
   debounceSave();
 }
-function addBord() {
-  const lastX = state.verticales.length > 0
-    ? Math.max(...state.verticales.map(v => parseFloat(v.abscisse) || 0)) : 0;
-  const v = newVerticale(lastX > 0 ? +(lastX + 0.2).toFixed(2) : 0, true);
-  state.verticales.push(v);
-  renderVerticales(); renderResults(); renderViz();
-  debounceSave();
-}
 function rmVert(id) {
-  state.verticales = state.verticales.filter(v => v.id !== id);
+  const idx = state.verticales.findIndex(v => v.id === id);
+  if (idx === -1) return;
+  const deleted = state.verticales[idx];
+  state.verticales.splice(idx, 1);
   if (state.expandedVertId === id) state.expandedVertId = null;
   renderVerticales(); renderResults(); renderViz();
   debounceSave();
+  /* Annulation possible pendant 8 secondes */
+  const label = deleted.isBord ? 'Bord' : (deleted.isBathy ? 'Verticale bathy' : 'Verticale');
+  const xAff = (deleted.abscisse !== '' && deleted.abscisse !== null) ? ` (x=${deleted.abscisse} m)` : '';
+  toast(`${label}${xAff} supprimée`, 'warn', {
+    actionLabel: 'Annuler',
+    duration: 8000,
+    onAction: () => {
+      state.verticales.splice(idx, 0, deleted);
+      renderVerticales(); renderResults(); renderViz();
+      debounceSave();
+      toast('Verticale restaurée.', 'ok');
+    },
+  });
 }
 function updVert(id, key, value) {
   const v = state.verticales.find(x => x.id === id);
@@ -1207,12 +1444,35 @@ function toggleBord(id, checked) {
   if (!v) return;
   v.isBord = checked;
   if (checked) {
-    v.profondeur = 0;
-    v.points = [{ z_rel: 0.4, v: 0 }];
-  } else if (v.points.length === 1 && v.points[0].v === 0) {
+    v.points = [];
+    if (v.coeffRive === null || v.coeffRive === undefined) v.coeffRive = 0.67;
+    v.isBathy = false;
+  } else {
+    v.coeffRive = null;
+    if (!v.points || v.points.length === 0) v.points = autoPointsForDepth(v.profondeur);
+  }
+  renderVerticales(); renderResults(); renderViz();
+  debounceSave();
+}
+function toggleBathy(id, checked) {
+  const v = state.verticales.find(x => x.id === id);
+  if (!v) return;
+  v.isBathy = checked;
+  if (checked) {
+    v.points = [];
+    v.isBord = false;
+    v.coeffRive = null;
+  } else if (!v.points || v.points.length === 0) {
     v.points = autoPointsForDepth(v.profondeur);
   }
   renderVerticales(); renderResults(); renderViz();
+  debounceSave();
+}
+function setCoeffRive(id, value) {
+  const v = state.verticales.find(x => x.id === id);
+  if (!v) return;
+  v.coeffRive = parseFloat(value) || 0.67;
+  renderResults(); renderViz();
   debounceSave();
 }
 function updPoint(vid, idx, key, value) {
@@ -1255,6 +1515,67 @@ function confirmReset() {
 function exportJSON() {
   download(JSON.stringify({ meta: state.meta, verticales: state.verticales, exportedAt: new Date().toISOString() }, null, 2),
     fileBaseName() + '.json', 'application/json;charset=utf-8;');
+}
+function exportCSV() {
+  /* Trois sections séparées par lignes blanches :
+     1. Métadonnées
+     2. Synthèse résultats
+     3. Détail par verticale (avec points de mesure) */
+  const r = computeAll();
+  const sep = ';';
+  const lines = [];
+  // — Métadonnées —
+  lines.push('# METADONNEES');
+  lines.push(['Date', state.meta.date || ''].join(sep));
+  lines.push(['Heure', state.meta.heure || ''].join(sep));
+  lines.push(['Cours d\'eau', state.meta.cours || ''].join(sep));
+  lines.push(['Station', state.meta.station || ''].join(sep));
+  lines.push(['Opérateur', state.meta.operateur || ''].join(sep));
+  lines.push(['Matériel', state.meta.materiel || ''].join(sep));
+  lines.push(['Echelle (m)', state.meta.echelle || ''].join(sep));
+  lines.push(['Notes', (state.meta.notes || '').replace(/[\r\n]+/g, ' ')].join(sep));
+  lines.push('');
+  // — Synthèse —
+  lines.push('# SYNTHESE');
+  lines.push(['Débit total (m³/s)', r.Q.toFixed(4)].join(sep));
+  if (r.uncertainty) {
+    lines.push(['Incertitude (95 %)', r.uncertainty.u_Q.toFixed(2) + ' %'].join(sep));
+    lines.push(['Incertitude (m³/s)', (r.Q * r.uncertainty.u_Q / 100).toFixed(4)].join(sep));
+  }
+  lines.push(['Section mouillée (m²)', r.S.toFixed(3)].join(sep));
+  lines.push(['Vitesse moyenne (m/s)', r.Vmoy.toFixed(3)].join(sep));
+  lines.push(['Profondeur moyenne (m)', r.Pmoy.toFixed(2)].join(sep));
+  lines.push(['Largeur totale (m)', r.L.toFixed(2)].join(sep));
+  lines.push(['Nombre de verticales', r.verts.length].join(sep));
+  lines.push('');
+  // — Détail par verticale —
+  lines.push('# DETAIL VERTICALES');
+  lines.push(['#', 'Type', 'Distance au bord (m)', 'Profondeur (m)', 'V_moy (m/s)', 'Surface partielle (m²)', 'Débit partiel (m³/s)', '% du débit', 'Coeff. rive α'].join(sep));
+  r.verts.forEach((v, i) => {
+    const part = r.partials[i];
+    const pctQ = r.Q > 0 ? (Math.abs(part.Q) / r.Q * 100).toFixed(1) : '';
+    const type = v.isBord ? 'Bord' : (v.isBathy ? 'Bathymétrique' : 'Mesurée');
+    lines.push([
+      i + 1, type, v.abscisse, v.profondeur,
+      (v.V_moy ?? 0).toFixed(4),
+      part.S.toFixed(4), part.Q.toFixed(4),
+      pctQ, v.isBord ? (v.coeffRive ?? '') : ''
+    ].join(sep));
+  });
+  lines.push('');
+  // — Détail des points par verticale complète —
+  lines.push('# DETAIL POINTS PAR VERTICALE');
+  lines.push(['# Verticale', 'Distance au bord (m)', 'Profondeur (m)', 'z_rel (depuis fond)', 'Hauteur depuis fond (m)', 'Vitesse (m/s)'].join(sep));
+  r.verts.forEach((v, i) => {
+    if (v.isBord || v.isBathy) return;
+    (v.points || []).forEach(p => {
+      const z_rel = parseFloat(p.z_rel);
+      const h_fond = !isNaN(z_rel) ? (z_rel * v.profondeur).toFixed(3) : '';
+      lines.push([i + 1, v.abscisse, v.profondeur, z_rel, h_fond, p.v ?? ''].join(sep));
+    });
+  });
+  const csv = '\uFEFF' + lines.join('\r\n');  // BOM pour ouverture correcte dans Excel français
+  download(csv, fileBaseName() + '.csv', 'text/csv;charset=utf-8;');
 }
 function importJSON(event) {
   const file = event.target.files[0];
@@ -1375,12 +1696,26 @@ function switchTab(name) {
   window.scrollTo(0, 0);
 }
 let toastTimer;
-function toast(msg, type = 'ok') {
+function toast(msg, type = 'ok', opts = {}) {
   const t = document.getElementById('toast');
-  t.innerHTML = msg;
+  t.innerHTML = '';
+  const span = document.createElement('span');
+  span.innerHTML = msg;
+  t.appendChild(span);
+  if (opts.actionLabel && typeof opts.onAction === 'function') {
+    const btn = document.createElement('button');
+    btn.className = 'toast-action';
+    btn.textContent = opts.actionLabel;
+    btn.onclick = () => {
+      opts.onAction();
+      t.classList.remove('show');
+    };
+    t.appendChild(btn);
+  }
   t.className = 'toast show ' + type;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+  const duration = opts.duration ?? 2400;
+  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 function showModal(title, body, onOk) {
   document.getElementById('modalTitle').textContent = title;
