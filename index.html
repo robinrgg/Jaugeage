@@ -166,16 +166,6 @@ section.card.collapsed .toggle { transform: rotate(-90deg); }
   align-items: center; padding: 9px 8px; gap: 6px;
   cursor: pointer;
 }
-.qual-badge {
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px; padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--bg-elev);
-  color: var(--txt-mute);
-}
-.vert-card.quality-green .qual-badge { color: #4ade80; }
-.vert-card.quality-yellow .qual-badge { color: #facc15; }
-.vert-card.quality-red .qual-badge { color: #ef4444; }
 .vert-num {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 12px; font-weight: 600;
@@ -193,6 +183,11 @@ section.card.collapsed .toggle { transform: rotate(-90deg); }
   text-transform: uppercase; letter-spacing: 0.06em;
 }
 .vert-handle { color: var(--txt-mute); font-size: 14px; text-align: center; }
+
+/* Valeur de contribution colorée selon la qualité de répartition (cf. quality-*) */
+.vert-card.quality-green .qual-val { color: #4ade80; }
+.vert-card.quality-yellow .qual-val { color: #facc15; }
+.vert-card.quality-red .qual-val { color: #ef4444; }
 
 .vert-detail {
   border-top: 1px solid var(--border);
@@ -922,7 +917,9 @@ function renderVerticales() {
     let tag = '';
     if (v.isBord) tag = '·B';
     else if (v.isBathy) tag = '·Z';
-    const partBadge = (r.Q > 0 && !isNaN(part)) ? `<span class="qual-badge">${(part*100).toFixed(1)}%</span>` : '';
+    const partBadge = (r.Q > 0 && !isNaN(part))
+      ? `<div class="vert-cell qual-cell"><span class="lbl">Contribution</span><span class="v qual-val">${(part*100).toFixed(1)} %</span></div>`
+      : '';
 
     const summary = document.createElement('div');
     summary.className = 'vert-summary';

@@ -2,7 +2,7 @@
 // Stratégie : cache-first pour le shell, network-first pour les ressources externes
 // Incrémenter CACHE_VERSION à chaque déploiement pour forcer la mise à jour.
 
-const CACHE_VERSION = 'jg-v5';
+const CACHE_VERSION = 'jg-v6';
 const CORE_ASSETS = [
   './',
   './index.html',
