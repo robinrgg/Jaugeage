@@ -1141,24 +1141,40 @@ function velAtZRel(v, zrel) {
 }
 
 // Vitesse interpolée à (x, y) où y = profondeur depuis la surface
+// Pour le rendu du champ de vitesse :
+//   - Bords (rive) : pris en compte avec V=0 par condition aux limites physique
+//   - Bathymétriques : ignorés pour l'interpolation horizontale (pas de mesure
+//     ponctuelle ; le calcul Froude au niveau intégré ne donne pas un profil)
+//   - Verticales mesurées : utilisées pleinement
 function velAt(x, y, verts) {
   if (verts.length < 2) return null;
-  let iL = 0, iR = verts.length - 1;
-  if (x <= verts[0].abscisse) { iL = 0; iR = 0; }
-  else if (x >= verts[verts.length-1].abscisse) { iL = verts.length-1; iR = verts.length-1; }
+  /* Indices encadrant pour la géométrie du fond (toutes verticales) */
+  let iLg = 0, iRg = verts.length - 1;
+  if (x <= verts[0].abscisse) { iLg = 0; iRg = 0; }
+  else if (x >= verts[verts.length-1].abscisse) { iLg = verts.length-1; iRg = verts.length-1; }
   else {
     for (let i = 0; i < verts.length - 1; i++) {
-      if (verts[i].abscisse <= x && verts[i+1].abscisse >= x) { iL = i; iR = i + 1; break; }
+      if (verts[i].abscisse <= x && verts[i+1].abscisse >= x) { iLg = i; iRg = i + 1; break; }
     }
   }
-  const vL = verts[iL], vR = verts[iR];
-  const t = (vL.abscisse === vR.abscisse) ? 0 : (x - vL.abscisse) / (vR.abscisse - vL.abscisse);
-  const fond = vL.profondeur + t * (vR.profondeur - vL.profondeur);
+  const vLg = verts[iLg], vRg = verts[iRg];
+  const tg = (vLg.abscisse === vRg.abscisse) ? 0 : (x - vLg.abscisse) / (vRg.abscisse - vLg.abscisse);
+  const fond = vLg.profondeur + tg * (vRg.profondeur - vLg.profondeur);
   if (fond <= 0 || y >= fond) return null;
+  /* Champ de vitesse : bords (V=0) + mesurées uniquement, bathy ignorées */
+  const validForField = v => v.isBord || (v.points && v.points.some(p => !isNaN(parseFloat(p.v))));
+  let vL = null, vR = null;
+  for (let j = iLg; j >= 0; j--) { if (validForField(verts[j])) { vL = verts[j]; break; } }
+  for (let j = iRg; j < verts.length; j++) { if (validForField(verts[j])) { vR = verts[j]; break; } }
+  if (!vL && !vR) return 0;
+  if (!vL) vL = vR;
+  if (!vR) vR = vL;
+  const tv = (vL.abscisse === vR.abscisse) ? 0 : (x - vL.abscisse) / (vR.abscisse - vL.abscisse);
   const z_rel = (fond - y) / fond;
-  const vL_z = velAtZRel(vL, z_rel);
-  const vR_z = velAtZRel(vR, z_rel);
-  return vL_z + t * (vR_z - vL_z);
+  /* Au bord : V=0 partout (condition aux limites). Sinon : profil mesuré. */
+  const vL_z = vL.isBord ? 0 : velAtZRel(vL, z_rel);
+  const vR_z = vR.isBord ? 0 : velAtZRel(vR, z_rel);
+  return vL_z + tv * (vR_z - vL_z);
 }
 
 function renderViz() {
